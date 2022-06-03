@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// This is a test.  msirek-temp
 var (
 	cacheSize       int64
 	concurrency     int
