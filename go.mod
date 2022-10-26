@@ -10,6 +10,7 @@ require (
 	github.com/golang/snappy v0.0.3
 	github.com/klauspost/compress v1.11.7
 	github.com/kr/pretty v0.1.0
+	github.com/ncw/directio v1.0.5
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0

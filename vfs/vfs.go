@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/ncw/directio"
 )
 
 // File is a readable, writable sequence of bytes.
@@ -170,7 +171,8 @@ func (defaultFS) Link(oldname, newname string) error {
 }
 
 func (defaultFS) Open(name string, opts ...OpenOption) (File, error) {
-	file, err := os.OpenFile(name, os.O_RDONLY|syscall.O_CLOEXEC, 0)
+	// file, err := os.OpenFile(name, os.O_RDONLY|syscall.O_CLOEXEC, 0)  // msirek-temp
+	file, err := directio.OpenFile(name, os.O_RDONLY|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
