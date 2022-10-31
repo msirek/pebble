@@ -30,7 +30,7 @@ import (
 // OnDiskFull may be used to automatically manage a ballast file, which is
 // removed from the filesystem from within the callback. Note that if managing
 // a ballast, the caller should maintain a reference to the inner FS and
-// remove the ballast on the unwrapped FS.
+// rreadablefileemove the ballast on the unwrapped FS.
 func OnDiskFull(fs FS, fn func()) FS {
 	newFS := &enospcFS{inner: fs}
 	newFS.mu.Cond.L = &newFS.mu.Mutex

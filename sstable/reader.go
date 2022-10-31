@@ -3229,7 +3229,8 @@ func (l *Layout) Describe(
 		}
 
 		if b.name == "footer" || b.name == "leveldb-footer" {
-			trailer, offset := make([]byte, b.Length), b.Offset
+			// msirek-temp  Hacky cast to int64.
+			trailer, offset := vfs.AlignedBlock(int64(b.Length), vfs.SectorSize), b.Offset
 			_, _ = r.file.ReadAt(trailer, int64(offset))
 
 			if b.name == "footer" {
@@ -3300,7 +3301,8 @@ func (l *Layout) Describe(
 		}
 
 		formatTrailer := func() {
-			trailer := make([]byte, blockTrailerLen)
+			//trailer := make([]byte, blockTrailerLen)
+			trailer := vfs.AlignedBlock(int64(blockTrailerLen), vfs.SectorSize) // msirek-temp
 			offset := int64(b.Offset + b.Length)
 			_, _ = r.file.ReadAt(trailer, offset)
 			bt := blockType(trailer[0])

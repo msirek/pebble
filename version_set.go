@@ -795,7 +795,8 @@ func readCurrentFile(fs vfs.FS, dirname string) (FileNum, error) {
 	if n > 4096 {
 		return 0, errors.Errorf("pebble: CURRENT file for DB %q is too large", dirname)
 	}
-	b := make([]byte, n)
+	// b := make([]byte, n)
+	b := vfs.AlignedBlock(n, vfs.SectorSize) // msirek-temp
 	_, err = current.ReadAt(b, 0)
 	if err != nil {
 		return 0, err

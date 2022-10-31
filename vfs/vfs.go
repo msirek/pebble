@@ -5,10 +5,12 @@
 package vfs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"syscall"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -170,6 +172,157 @@ func (defaultFS) Link(oldname, newname string) error {
 	return errors.WithStack(os.Link(oldname, newname))
 }
 
+type DirectFile struct {
+	os.File
+	blockInBuffer bool
+
+	// uncopiedBytes is the slice backed by bufferMem.
+	uncopiedBytes []byte
+	bufferMem     *[]byte
+	Fd            uintptr
+
+	err error
+
+	open bool
+	EOF  bool
+}
+
+const blockSize = directio.AlignSize
+
+/*
+	var BlockPool = sync.Pool{
+		New: func() interface{} {
+			block := directio.AlignedBlock(blockSize)
+			return &block
+		},
+	}
+
+	func (d DirectFile) Read(p []byte) (n int, err error) {
+		if d.err != nil && (!d.blockInBuffer || len(d.uncopiedBytes) == 0) {
+			return 0, d.err
+		}
+		if !d.open {
+			return 0, errors.New("pebble/vfs: file was not opened for reading")
+		}
+		if d.bufferMem == nil {
+			d.bufferMem = BlockPool.Get().(*[]byte)
+		}
+		if !d.blockInBuffer {
+			d.uncopiedBytes = *d.bufferMem
+			n, d.err = d.File.Read(d.uncopiedBytes)
+			if d.err != nil {
+				return 0, d.err
+			}
+			if n == 0 {
+				d.err = io.EOF
+				return 0, io.EOF
+			}
+			// Adjust the uncopiedBytes's size to match bytes available to copy.
+			d.uncopiedBytes = d.uncopiedBytes[:n]
+			d.blockInBuffer = true
+		}
+		if len(p) >= len(d.uncopiedBytes) {
+			n = copy(p, d.uncopiedBytes)
+			d.blockInBuffer = false
+			return n, nil
+		}
+		// Copy as much of the buffer to the caller as possible.
+		n = copy(p, d.uncopiedBytes)
+
+		// Slice the bytes in buffer to the remaining unread bytes.
+		d.uncopiedBytes = d.uncopiedBytes[n:]
+
+		return n, nil
+	}
+
+func (e *Engine) getBlockInFile(source *os.File, blockSize, index int) ([]byte, error) {
+
+		offset := int64(blockSize * index)
+		info, err := source.Stat()
+		if err != nil {
+			return []byte{}, err
+		}
+		remainingBytes := info.Size() - int64(blockSize*index)
+		bufferSize := int(math.Min(float64(remainingBytes),
+			float64(blockSize)))
+		p := make([]byte, bufferSize)
+		_, err = source.ReadAt(p, offset)
+		return p, err
+	}
+
+	func (d DirectFile) ReadAt(p []byte, off int64) (n int, err error) {
+		if off
+		blockNum := off / blockSize
+
+		return f.inner.ReadAt(p, off)
+	}
+
+	func ReadAll(r Reader) ([]byte, error) {
+		b := make([]byte, 0, 512)
+		for {
+			if len(b) == cap(b) {
+				// Add more capacity (let append pick how much).
+				b = append(b, 0)[:len(b)]
+			}
+			n, err := r.Read(b[len(b):cap(b)])
+			b = b[:len(b)+n]
+			if err != nil {
+				if err == EOF {
+					err = nil
+				}
+				return b, err
+			}
+		}
+	}
+*/
+const SectorSize = int64(512)
+
+// AlignedBlock returns []byte of size BlockSize aligned to a multiple
+// of AlignSize in memory (must be power of two)
+func AlignedBlock(blockSize, alignSize int64) (block []byte) {
+	block = make([]byte, blockSize+alignSize)
+	if alignSize == 0 {
+		return block
+	}
+	a := int64(uintptr(unsafe.Pointer(&block[0])) & uintptr(alignSize-1))
+	alignmentOffset := int64(0)
+	if a != 0 {
+		alignmentOffset = alignSize - a
+	}
+	block = block[alignmentOffset : alignmentOffset+blockSize]
+	// Can't check alignment of a zero sized block
+	if blockSize != 0 {
+		a = int64(uintptr(unsafe.Pointer(&block[0])) & uintptr(alignSize-1))
+		if a != 0 {
+			panic(fmt.Sprintf("pebble: failed to align block"))
+		}
+	}
+	return block
+}
+
+func AlignBlock(blockSize, alignSize, offset int64, slice []byte) (block []byte) {
+	if alignSize == 0 {
+		return block
+	}
+	a := int64(uintptr(unsafe.Pointer(&block[offset])) & uintptr(alignSize-1))
+	alignmentOffset := int64(0)
+	if a != 0 {
+		alignmentOffset = alignSize - a
+	}
+	if int64(cap(slice)) < (alignmentOffset + blockSize + offset) {
+		panic(fmt.Sprintf("pebble: failed to align block"))
+	}
+	block = slice[alignmentOffset : alignmentOffset+blockSize]
+	// Can't check alignment of a zero sized block
+	if blockSize != 0 {
+		a = int64(uintptr(unsafe.Pointer(&block[offset])) & uintptr(alignSize-1))
+		if a != 0 {
+			panic(fmt.Sprintf("pebble: failed to align block"))
+		}
+	}
+	return block
+}
+
 func (defaultFS) Open(name string, opts ...OpenOption) (File, error) {
 	// file, err := os.OpenFile(name, os.O_RDONLY|syscall.O_CLOEXEC, 0)  // msirek-temp
 	file, err := directio.OpenFile(name, os.O_RDONLY|syscall.O_CLOEXEC, 0)
@@ -179,6 +332,9 @@ func (defaultFS) Open(name string, opts ...OpenOption) (File, error) {
 	for _, opt := range opts {
 		opt.Apply(file)
 	}
+	/*  msirek-temp->
+	directio.AlignedBlock
+	directFile := DirectFile{file} */
 	return file, nil
 }
 

@@ -8,6 +8,7 @@
 package cache
 
 import (
+	"github.com/cockroachdb/pebble/vfs"
 	"unsafe"
 
 	"github.com/cockroachdb/pebble/internal/manual"
@@ -23,7 +24,7 @@ func newValue(n int) *Value {
 	if !cgoEnabled {
 		// If Cgo is disabled then all memory is allocated from the Go heap and we
 		// can't play the trick below to combine the Value and buffer allocation.
-		v := &Value{buf: make([]byte, n)}
+		v := &Value{buf: vfs.AlignedBlock(int64(n), vfs.SectorSize) /* msirek-temp */}
 		v.ref.init(1)
 		return v
 	}
@@ -36,7 +37,8 @@ func newValue(n int) *Value {
 	// the buffer in order to reduce internal fragmentation in malloc. If the
 	// buffer is right at a power of 2, adding valueSize might push the
 	// allocation over into the next larger size.
-	b := manual.New(valueSize + n)
+	b := manual.New((valueSize * 2) + n + int(vfs.SectorSize)) // msirek-temp
+	b = vfs.AlignBlock(int64(valueSize+n), vfs.SectorSize, int64(valueSize), b)
 	v := (*Value)(unsafe.Pointer(&b[0]))
 	v.buf = b[valueSize:]
 	v.ref.init(1)
